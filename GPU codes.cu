@@ -37,7 +37,7 @@ bool InitCUDA();
 void matgen(float* a, int lda, int m, int n);
 //CUDA configuration functions, including memory allocation, number transfer, call kernel function calculation, etc
 clock_t matmultCUDA(const float* a, int lda, const float* b, int ldb, float* c, int ldc, int m, int n, int k);//m*n矩阵和n*k矩阵
-//进行GPU计算的核函数
+//The kernel function in GPU
 __global__ static void matMultCUDA(const float* a, size_t lda, const float* b, size_t ldb, float* c, size_t ldc, int m, int n, int k);
 //Matrix generation
 void matgen(float* a, int lda, int m, int n);
