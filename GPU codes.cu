@@ -100,48 +100,23 @@ clock_t matmultCUDA(const float* a, int lda, const float* b, int ldb, float* c, 
 
 	size_t pitch_a, pitch_b, pitch_c;
 	int newn = ((m+n+k + BLOCK_NUM - 1) / BLOCK_NUM) * BLOCK_NUM;
-
-	//cudaMallocPitch( void** devPtr，size_t* pitch，size_t widthInBytes，size_t height )
-	//向设备分配至少widthInBytes * height 字节的global memory
-	//使用cudaMallocPitch()来执行间距分配，来克服在GPU不同区域之间执行2D存储器复制时，硬件中存在的间距对齐限制。
 	cudaMallocPitch((void**)&ac, &pitch_a, sizeof(float) * newn, newn);
 	cudaMallocPitch((void**)&bc, &pitch_b, sizeof(float) * newn, newn);
 	cudaMallocPitch((void**)&cc, &pitch_c, sizeof(float) * newn, newn);
-
-	//cudaMemset为分配的global memory初始化值
 	cudaMemset(ac, 0, pitch_a * newn);
 	cudaMemset(bc, 0, pitch_b * newn);
-
-	//也可以从host调用cudaMemcpy赋值
-	//一般的 cudaMemcpy 来复制内存，会需要每个 row 都分开复制，那会需要呼叫很多次 cudaMemcpy 函式，会使效率变得很差。
-	//cudaMemcpy2D用来复制二维数组，可以指定数组的 pitch即 lda、ldb、和 ldc）
-	//cudaMemcpyHostToDevice - 从内存复制到显卡内存
-	//cudaMemcpyDeviceToHost - 从显卡内存复制到内存
 	cudaMemcpy2D(ac, pitch_a, a, sizeof(float) * lda, sizeof(float) * n, m, cudaMemcpyHostToDevice);
 	cudaMemcpy2D(bc, pitch_b, b, sizeof(float) * ldb, sizeof(float) * k, n, cudaMemcpyHostToDevice);
-
-
 	int bx = (m + n + k + BLOCK_NUM - 1) / BLOCK_NUM;
-
-	//grid和block都是定义为dim3类型的变量，dim3可以看成是包含三个无符号整数x，y，z成员的结构体变量
-	//在定义时，缺省值初始化为1。grid和block可以灵活地定义为1-dim，2-dim以及3-dim结构，
-	//kernel在调用时也必须通过执行配置<<<grid, block>>>来指定kernel所使用的线程数及结构。
-	//这里使用了二维的block和thread组织方式
 	dim3 blocks(bx, bx);
 	dim3 threads(BLOCK_NUM, BLOCK_NUM);
-
-	//调用核函数的语句
-	//函数名<<<block 数目, thread 数目, shared memory 大小>>>(参数...); 
 	matMultCUDA << <blocks, threads >> > (ac, pitch_a / sizeof(float), bc, pitch_b / sizeof(float), cc, pitch_c / sizeof(float), m, n, k);
 
-	//从GPU拷回内存
 	cudaMemcpy2D(c, sizeof(float) * ldc, cc, pitch_c, sizeof(float) * k, m, cudaMemcpyDeviceToHost);
 
-	//用于捕获cuda运行时的错误
 	cudaError_t error = cudaGetLastError();
 	printf("CUDA error: %s\n", cudaGetErrorString(error));
 
-	//释放cuda内存
 	cudaFree(ac);
 	cudaFree(bc);
 	cudaFree(cc);
@@ -152,14 +127,9 @@ clock_t matmultCUDA(const float* a, int lda, const float* b, int ldb, float* c, 
 }
 __global__ static void matMultCUDA(const float* a, size_t lda, const float* b, size_t ldb, float* c, size_t ldc, int m, int n, int k)
 {
-	//__shared__修饰符修饰的变量存放在shared memory中，由一个block中的不同thread共享
-	//shared memory的数据使用前必须先用__syncthreads()同步
 	__shared__ float matA[BLOCK_NUM][BLOCK_NUM];
 	__shared__ float matB[BLOCK_NUM][BLOCK_NUM];
 
-	//调用核函数时线程是二维组织，可以通过blockIdx和threadIdx的x.y来标识一个线程
-	//单个block中，有Dx, Dy, 0个线程，则每个线程ID为x+yDx；
-	//有Dx, Dy, Dz个线程，则每个线程ID为x+yDx+zDxDy
 	const int tidc = threadIdx.x;//thread column
 	const int tidr = threadIdx.y;//thread row
 	const int bidc = blockIdx.x * BLOCK_NUM;//block column
